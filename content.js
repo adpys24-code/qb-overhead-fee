@@ -64,7 +64,7 @@
   }
   function isOverheadRow(row) {
     var d = getDesc(row);
-    return d ? d.value.trim() === OVERHEAD_LABEL : false;
+    return d ? /% Overhead Fee$/.test(d.value.trim()) : false;
   }
   function overheadExists(rows) {
     return rows.some(isOverheadRow);
@@ -123,8 +123,8 @@
 
     var base   = calcBase(rows);
     var fee    = parseFloat((base * overheadPercent / 100).toFixed(2));
-    var target = getLastEmptyRow(rows);
-    if (!target) { alert('No empty row. Please add a new line first.'); return; }
+    var target = e.currentTarget.closest('tr');
+    if (!target) { alert('Could not find the row. Please try again.'); return; }
 
     removeButton(); // hide immediately on click
 
@@ -134,7 +134,7 @@
 
     // 2. Description = "Overhead Fee"
     var desc = getDesc(target);
-    if (desc) setVal(desc, OVERHEAD_LABEL);
+    if (desc) setVal(desc, overheadPercent + '% Overhead Fee');
 
     // 3. Rate + auto-fill Amount (using confirmed native event sequence)
     setRate(getRate(target), fee.toFixed(2), function () {
