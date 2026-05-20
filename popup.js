@@ -24,7 +24,7 @@
     var pct=Math.round(val*10)/10; percentInput.value=pct;
     chrome.storage.sync.set({overheadPercent:pct},function(){
       chrome.tabs.query({active:true,currentWindow:true},function(tabs){
-        if(tabs&&tabs[0]) chrome.tabs.sendMessage(tabs[0].id,{type:'OVERHEAD_PERCENT_CHANGED',percent:pct},function(){});
+        if(tabs&&tabs[0]) chrome.tabs.sendMessage(tabs[0].id,{type:'OVERHEAD_PERCENT_CHANGED',percent:pct},function(){void chrome.runtime.lastError;});
       });
       saveBtn.textContent='Saved!'; saveBtn.classList.add('saved');
       setTimeout(function(){saveBtn.textContent='Save';saveBtn.classList.remove('saved');},1500);
@@ -35,7 +35,7 @@
     if(isNaN(val)||val<=0) return;
     var pct=Math.round(val*10)/10;
     chrome.tabs.query({active:true,currentWindow:true},function(tabs){
-      if(tabs&&tabs[0]) chrome.tabs.sendMessage(tabs[0].id,{type:'OVERHEAD_PERCENT_CHANGED',percent:pct},function(){});
+      if(tabs&&tabs[0]) chrome.tabs.sendMessage(tabs[0].id,{type:'OVERHEAD_PERCENT_CHANGED',percent:pct},function(){void chrome.runtime.lastError;});
     });
   });
   percentInput.addEventListener('keydown',function(e){if(e.key==='Enter')saveBtn.click();});
