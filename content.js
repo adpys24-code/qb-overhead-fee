@@ -28,8 +28,8 @@
     return isNaN(v) ? 0 : v;
   }
 
-  // Set a textarea/input value and fire events so QBO registers the change.
-  // Works for description (textarea) and quantity.
+  // Set a generic input/textarea via native setter + events.
+  // Used only for Quantity (a simple uncontrolled-style input).
   function setVal(el, val) {
     if (!el) return;
     if (el.tagName === 'TEXTAREA') textareaSetter.call(el, val);
@@ -37,6 +37,27 @@
     el.dispatchEvent(new Event('input',  { bubbles: true }));
     el.dispatchEvent(new Event('change', { bubbles: true }));
     el.dispatchEvent(new Event('blur',   { bubbles: true }));
+  }
+
+  // Set the Description textarea so QBO's React state is properly updated and survives save.
+  //
+  // The textareaSetter + dispatchEvent approach only updates the DOM value; QBO's save
+  // reads from React state (fiber.memoizedProps.value), which stays "" unless the change
+  // flows through React's own event delegation. execCommand('insertText') fires a real
+  // InputEvent that React's root listener intercepts, updating the component's state.
+  // The native el.blur() then fires QBO's onBlur commit chain, persisting the value
+  // all the way up to the line-item store.
+  function setDesc(el, val, cb) {
+    if (!el) { if (cb) cb(); return; }
+    el.focus();
+    setTimeout(function () {
+      document.execCommand('selectAll');
+      document.execCommand('insertText', false, val);
+      setTimeout(function () {
+        el.blur();
+        if (cb) setTimeout(cb, 150);
+      }, 60);
+    }, 50);
   }
 
   // Walk up the React fiber tree from `el` and return the Nth ancestor that
@@ -62,8 +83,6 @@
   // Set the Rate field by calling QBO's internal commit handler (the 4th onChange
   // ancestor in the fiber tree). This is the only approach that updates QBO's
   // internal line-item state and triggers amount = qty × rate recalculation.
-  // The native-event / inputSetter approaches change the DOM but QBO re-renders
-  // the field back to 0 because the controlled-component state never updated.
   function setRate(rateEl, val, cb) {
     if (!rateEl) { if (cb) cb(); return; }
     var commitOnChange = findNthOnChangeProp(rateEl, 4);
@@ -71,7 +90,7 @@
       commitOnChange(String(val));
       if (cb) setTimeout(cb, 200);
     } else {
-      // Fallback: try direct input focus+type if fiber approach fails
+      // Fallback if fiber approach fails
       rateEl.focus();
       setTimeout(function () {
         inputSetter.call(rateEl, String(val));
@@ -83,20 +102,11 @@
     }
   }
 
-  // Select the product/service by opening the dropdown like a real user and
-  // clicking the matching <li> item. This is the only reliable way to commit
-  // the selection — React fiber methods (doSelectItem, widget.onChange) cause
-  // re-render races that clear the field.
-  //
-  // Flow:
-  //   1. focus() + click() the input → dropdown opens
-  //   2. poll for the <li> item containing `name`
-  //   3. .click() the <li> → QBO commits the selection, fills default desc/rate
-  //   4. wait 500ms for async fill-in, then call cb to override desc+rate
+  // Select the product/service by opening the dropdown and clicking the matching <li>.
+  // This is the only reliable way — React fiber methods cause re-render races.
   function setProduct(productInput, name, cb) {
     if (!productInput) { if (cb) cb(); return; }
 
-    // Open the dropdown
     productInput.focus();
     productInput.click();
 
@@ -106,8 +116,6 @@
       for (var i = 0; i < items.length; i++) {
         if (items[i].textContent.trim().toLowerCase().indexOf(name.toLowerCase()) !== -1) {
           items[i].click();
-          // Wait for QBO to commit the selection and async-fill desc/rate,
-          // then let the callback override those values.
           if (cb) setTimeout(cb, 500);
           return;
         }
@@ -115,7 +123,6 @@
       if (++attempts < 25) {
         setTimeout(pollForItem, 80);
       } else {
-        // Dropdown never appeared or item not found; run cb anyway
         if (cb) cb();
       }
     }
@@ -202,22 +209,21 @@
     var qty = getQty(target);
     if (qty && qty.value !== '1') setVal(qty, '1');
 
-    // 2. Select "Overhead and Fee" from the dropdown via real DOM interaction.
-    //    After the <li> click, QBO commits the product and async-fills desc/rate (price=0).
-    //    Our callback fires 500ms later to override those values.
-    var productInput = getProduct(target);
-    setProduct(productInput, 'Overhead and Fee', function () {
+    // 2. Product/Service — open dropdown, click the matching <li>.
+    //    QBO commits the product and async-fills desc/rate (price=0).
+    //    Callback fires 500ms later to override those values.
+    setProduct(getProduct(target), 'Overhead and Fee', function () {
 
-      // Re-query the row elements — QBO may have re-rendered the row after product selection
-      var rateEl = getRate(target);
+      // 3. Description — use focus + execCommand + native blur so React state updates
       var descEl = getDesc(target);
+      setDesc(descEl, overheadPercent + '% Overhead Fee', function () {
 
-      // 3. Description
-      if (descEl) setVal(descEl, overheadPercent + '% Overhead Fee');
-
-      // 4. Rate — must use the fiber-based commit handler so QBO recalculates amount
-      setRate(rateEl, fee.toFixed(2), function () {
-        target.classList.add('qb-overhead-row-marked');
+        // 4. Rate — use the fiber's 4th onChange prop (the line-item commit handler)
+        //    so QBO recalculates amount = qty × rate
+        var rateEl = getRate(target);
+        setRate(rateEl, fee.toFixed(2), function () {
+          target.classList.add('qb-overhead-row-marked');
+        });
       });
     });
   }
