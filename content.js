@@ -136,7 +136,7 @@
 
   function isOverheadRow(row) {
     var d = getDesc(row);
-    return d ? /% Overhead Fee$/.test(d.value.trim()) : false;
+    return d ? /%$/.test(d.value.trim()) : false;
   }
 
   function overheadExists(rows) { return rows.some(isOverheadRow); }
@@ -216,7 +216,7 @@
 
       // 3. Description — use focus + execCommand + native blur so React state updates
       var descEl = getDesc(target);
-      setDesc(descEl, overheadPercent + '% Overhead Fee', function () {
+      setDesc(descEl, overheadPercent + '%', function () {
 
         // 4. Rate — use the fiber's 4th onChange prop (the line-item commit handler)
         //    so QBO recalculates amount = qty × rate
